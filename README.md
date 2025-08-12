@@ -1,23 +1,97 @@
-# `micha`
+# Micha Project
 
-Welcome to your new `micha` project and to the Internet Computer development community. By default, creating a new project adds this README and some template files to your project directory. You can edit these template files to customize your project and to include your own code to speed up the development cycle.
+Welcome to the Micha project, a decentralized application built on the Internet Computer Protocol (ICP). This README will help you get started with local development.
 
-To get started, you might want to explore the project directory structure and the default configuration file. Working with this project in your development environment will not affect any production deployment or identity tokens.
+## 🚀 Prerequisites
 
-To learn more before you start working with `micha`, see the following documentation available online:
+Before you begin, ensure you have the following installed:
 
-- [Quick Start](https://internetcomputer.org/docs/current/developer-docs/setup/deploy-locally)
-- [SDK Developer Tools](https://internetcomputer.org/docs/current/developer-docs/setup/install)
-- [Motoko Programming Language Guide](https://internetcomputer.org/docs/current/motoko/main/motoko)
-- [Motoko Language Quick Reference](https://internetcomputer.org/docs/current/motoko/main/language-manual)
+- [Node.js](https://nodejs.org/) (v16 or later)
+- [DFINITY Canister SDK (DFX)](https://internetcomputer.org/docs/current/developer-docs/setup/install/)
+- [Git](https://git-scm.com/)
 
-If you want to start working on your project right away, you might want to try the following commands:
+## 🛠 Installation
 
-```bash
-cd micha/
-dfx help
-dfx canister --help
+1. Clone the repository:
+   ```bash
+   git clone <repository-url>
+   cd micha
+   ```
+
+2. Install Node.js dependencies:
+   ```bash
+   npm install
+   ```
+
+## 🏃‍♂️ Local Development
+
+### Starting the Development Environment
+
+1. Start the local Internet Computer replica in the background:
+   ```bash
+   dfx start --background
+   ```
+
+2. Deploy your canisters:
+   ```bash
+   dfx deploy
+   ```
+
+3. Start the development server:
+   ```bash
+   npm start
+   ```
+
+Your application will be available at [http://localhost:8080](http://localhost:8080).
+
+## 📁 Project Structure
+
 ```
+micha/
+├── .dfx/             # DFINITY Canister SDK working directory
+├── src/              # Source files
+│   ├── micha/        # Main canister code
+│   └── micha_assets/ # Frontend assets
+├── .env              # Environment variables
+├── dfx.json          # DFINITY project configuration
+├── package.json      # Node.js dependencies and scripts
+└── tsconfig.json     # TypeScript configuration
+```
+
+## 🔄 Development Workflow
+
+- After making changes to your backend canister, regenerate the candid interface:
+  ```bash
+  npm run generate
+  ```
+  
+  This is automatically done when you run `dfx deploy`.
+
+- For frontend development, the development server supports hot-reload.
+
+## 📚 Useful Commands
+
+- Check DFX version:
+  ```bash
+  dfx --version
+  ```
+
+- Stop the local replica:
+  ```bash
+  dfx stop
+  ```
+
+- View canister status:
+  ```bash
+  dfx canister status
+  ```
+
+## 📖 Documentation
+
+For more information, refer to:
+- [Internet Computer Documentation](https://internetcomputer.org/docs/current/developer-docs/)
+- [Motoko Language Guide](https://internetcomputer.org/docs/current/motoko/main/motoko)
+- [DFX Command Reference](https://internetcomputer.org/docs/current/references/cli-reference/dfx-parent)
 
 ## Running the project locally
 

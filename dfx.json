@@ -12,7 +12,7 @@
         "src/micha_frontend/dist"
       ],
       "type": "assets",
-      "workspace": "micha_frontend"
+      "build": "cd src/micha_frontend && npm run build"
     }
   },
   "defaults": {
