@@ -1,0 +1,26 @@
+{
+  "canisters": {
+    "micha_backend": {
+      "main": "src/micha_backend/main.mo",
+      "type": "motoko"
+    },
+    "micha_frontend": {
+      "dependencies": [
+        "micha_backend"
+      ],
+      "source": [
+        "src/micha_frontend/dist"
+      ],
+      "type": "assets",
+      "workspace": "micha_frontend"
+    }
+  },
+  "defaults": {
+    "build": {
+      "args": "",
+      "packtool": ""
+    }
+  },
+  "output_env_file": ".env",
+  "version": 1
+}
