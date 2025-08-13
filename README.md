@@ -1,6 +1,6 @@
-# Micha Project
+# PeerVerse
 
-Welcome to the Micha project, a decentralized application built on the Internet Computer Protocol (ICP). This README will help you get started with local development.
+Welcome to the PeerVerse, a decentralized application built on the Internet Computer Protocol (ICP). This README will help you get started with local development.
 
 ## 🚀 Prerequisites
 
@@ -9,6 +9,7 @@ Before you begin, ensure you have the following installed:
 - [Node.js](https://nodejs.org/) (v16 or later)
 - [DFINITY Canister SDK (DFX)](https://internetcomputer.org/docs/current/developer-docs/setup/install/)
 - [Git](https://git-scm.com/)
+- [wsl]()
 
 ## 🛠 Installation
 
@@ -23,7 +24,7 @@ Before you begin, ensure you have the following installed:
    npm install
    ```
 
-## 🏃‍♂️ Local Development
+##  Local Development If you are using windows 
 
 ### Starting the Development Environment
 
