@@ -3,34 +3,37 @@ import { AuthClient } from "@dfinity/auth-client"
 import type { IDL } from "@dfinity/candid"
 import { idlFactory as userProfileIdl } from "./user-profile.idl"
 
-// Replace with your deployed canister IDs
-export const USER_PROFILE_CANISTER_ID = "aaaaa-aa" // TODO: set real canister id
-export const ASSET_CANISTER_ID = "bbbbb-bb" // TODO: set real asset canister id
-export const SESSIONS_CANISTER_ID = "ccccc-cc" // TODO: set real sessions canister id
+// Replace with your deployed canister IDs on ICP mainnet
+export const USER_PROFILE_CANISTER_ID = "rdmx6-jaaaa-aaaah-qdrva-cai" // Example mainnet canister ID
+export const ASSET_CANISTER_ID = "rrkah-fqaaa-aaaah-qcuwa-cai" // Example mainnet canister ID
+export const SESSIONS_CANISTER_ID = "ryjl3-tyaaa-aaaah-qcuwa-cai" // Replace with your actual Sessions canister ID
 
 export function detectIcHost(): string {
-  if (typeof window === "undefined") return "https://ic0.app"
-  const host = window.location.hostname
-  const isLocal = host === "localhost" || host === "127.0.0.1" || host.endsWith(".localhost") || host.endsWith(".local")
-  // Local replica default
-  return isLocal ? "https://ic0.app" : "https://ic0.app"
+  // Always use mainnet for production
+  return "https://ic0.app"
 }
 
 export async function getIdentity(): Promise<Identity | null> {
-  const client = await AuthClient.create()
+  const client = await AuthClient.create({
+    idleOptions: {
+      idleTimeout: 1000 * 60 * 30, // 30 minutes
+      disableDefaultIdleCallback: true,
+    },
+  })
   const ok = await client.isAuthenticated()
   return ok ? client.getIdentity() : null
 }
 
 export async function getAgent(identity?: Identity) {
   const host = detectIcHost()
-  const agent = new HttpAgent({ host, identity })
-  // Local replica requires root key
-  if (host.includes("127.0.0.1") || host.includes(":4943")) {
-    await agent.fetchRootKey().catch(() => {
-      console.warn("Unable to fetch root key. Is the local replica running?")
-    })
-  }
+  const agent = new HttpAgent({
+    host,
+    identity,
+    // Use fetch for better compatibility
+    fetch: globalThis.fetch,
+  })
+
+  // No need to fetch root key for mainnet
   return agent
 }
 

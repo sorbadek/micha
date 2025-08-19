@@ -1,13 +1,6 @@
 {
   "canisters": {
-    "micha_backend": {
-      "main": "src/micha_backend/main.mo",
-      "type": "motoko"
-    },
     "micha_frontend": {
-      "dependencies": [
-        "micha_backend"
-      ],
       "source": [
         "src/micha_frontend/dist"
       ],
