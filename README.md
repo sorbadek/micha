@@ -15,13 +15,13 @@ Before you begin, ensure you have the following installed:
 
 1. Clone the repository:
    ```bash
-   git clone <repository-url>
+   git clone [<repository-url>](https://github.com/sorbadek/micha)
    cd micha
    ```
 
 2. Install Node.js dependencies:
    ```bash
-   npm install
+   cd src/micha_frontend && npm install
    ```
 
 ##  Local Development If you are using windows 
@@ -111,7 +111,10 @@ Once the job completes, your application will be available at `http://localhost:
 If you have made changes to your backend canister, you can generate a new candid interface with
 
 ```bash
-npm run generate
+cd src/micha_backend
+```
+```bash
+dfx deploy
 ```
 
 at any time. This is recommended before starting the frontend development server, and will be run automatically any time you run `dfx deploy`.
@@ -119,7 +122,7 @@ at any time. This is recommended before starting the frontend development server
 If you are making frontend changes, you can start a development server with
 
 ```bash
-npm start
+npm run dev
 ```
 
 Which will start a server at `http://localhost:8080`, proxying API requests to the replica at port 4943.
