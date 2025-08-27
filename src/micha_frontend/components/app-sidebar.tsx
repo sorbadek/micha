@@ -33,9 +33,12 @@ import {
   ChevronRight,
 } from "lucide-react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import styles from "./no-scrollbar.module.css"
+import { useAuth } from "@/lib/auth-context"
+import { Button } from "@/components/ui/button"
+import { LogOut } from "lucide-react"
 
 const items = [
   { title: "Overview", href: "/dashboard", icon: Home },
@@ -53,6 +56,17 @@ const items = [
 
 export default function AppSidebar() {
   const pathname = usePathname()
+  const { logout } = useAuth()
+  const router = useRouter()
+
+  const handleLogout = async () => {
+    try {
+      await logout()
+      router.push('/')
+    } catch (error) {
+      console.error('Failed to log out:', error)
+    }
+  }
 
   return (
     <Sidebar
@@ -123,24 +137,15 @@ export default function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter>
-        <div className="mb-2 grid grid-cols-4 gap-2 px-2">
-          {[Twitter, Github, Disc, Rss].map((I, idx) => (
-            <a
-              key={idx}
-              href="#"
-              className="grid h-8 w-full place-items-center rounded-lg bg-white/5 text-white/70 hover:bg-white/10 hover:text-white"
-            >
-              <I className="size-4" />
-              <span className="sr-only">Social</span>
-            </a>
-          ))}
-        </div>
-        <div className="px-2 pb-2">
-          <div className="rounded-xl border border-white/10 bg-white/5 p-2 text-xs text-white/70">
-            Sidebar fixed. Scrollbar hidden.
-          </div>
-        </div>
+      <SidebarFooter className="p-2">
+        <Button
+          onClick={handleLogout}
+          variant="ghost"
+          className="w-full justify-start gap-2 rounded-lg px-3 py-6 text-white/80 hover:bg-white/10 hover:text-white"
+        >
+          <LogOut className="size-5" />
+          <span>Logout</span>
+        </Button>
       </SidebarFooter>
     </Sidebar>
   )

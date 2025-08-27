@@ -1,230 +1,254 @@
-'use client'
+"use client"
 
-import { useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Badge } from '@/components/ui/badge'
-import { Search, Video, Calendar, Clock, MapPin, Users, DollarSign, PlusCircle, Lightbulb, MessageSquare, Star } from 'lucide-react'
-import Link from 'next/link'
-import SessionCreationModal from '@/components/session-creation-modal'
-
-interface Session {
-  id: string
-  title: string
-  description: string
-  host: {
-    name: string
-    avatar: string
-    username: string
-    rating: number
-  }
-  date: string
-  time: string
-  duration: number // in minutes
-  maxAttendees: number
-  currentAttendees: number
-  price: number // in XP
-  isOnline: boolean
-  location: string
-  type: 'live' | 'q&a' | 'workshop'
-  tags: string[]
-}
-
-const mockSessions: Session[] = [
-  {
-    id: 's1',
-    title: 'Mastering Motoko Basics',
-    description: 'A comprehensive live class covering the fundamentals of Motoko programming for ICP smart contracts.',
-    host: { name: 'Alice Johnson', avatar: '/alice-johnson-avatar.png', username: 'alice_j', rating: 4.9 },
-    date: '2024-08-15',
-    time: '10:00 AM UTC',
-    duration: 90,
-    maxAttendees: 50,
-    currentAttendees: 35,
-    price: 100,
-    isOnline: true,
-    location: 'Online',
-    type: 'live',
-    tags: ['Motoko', 'ICP', 'Smart Contracts'],
-  },
-  {
-    id: 's2',
-    title: 'Q&A: Frontend Development with Azle',
-    description: 'An interactive Q&A session to answer your questions about building frontends for ICP dApps using Azle (TypeScript/JavaScript).',
-    host: { name: 'Bob Williams', avatar: '/bob-williams-avatar.png', username: 'bob_w', rating: 4.7 },
-    date: '2024-08-17',
-    time: '02:00 PM UTC',
-    duration: 60,
-    maxAttendees: 30,
-    currentAttendees: 20,
-    price: 50,
-    isOnline: true,
-    location: 'Online',
-    type: 'q&a',
-    tags: ['Azle', 'Frontend', 'ICP', 'TypeScript'],
-  },
-  {
-    id: 's3',
-    title: 'Rust Ownership & Borrowing Workshop',
-    description: 'A hands-on workshop to solidify your understanding of Rust\'s unique ownership and borrowing system.',
-    host: { name: 'Sarah Chen', avatar: '/sarah-chen-avatar.png', username: 'sarah_c', rating: 4.8 },
-    date: '2024-08-20',
-    time: '06:00 PM Local',
-    duration: 120,
-    maxAttendees: 15,
-    currentAttendees: 10,
-    price: 150,
-    isOnline: false,
-    location: 'Community Hub, City Center',
-    type: 'workshop',
-    tags: ['Rust', 'Programming', 'Workshop'],
-  },
-  {
-    id: 's4',
-    title: 'Introduction to Canister Upgrades',
-    description: 'Learn the process and best practices for upgrading your ICP canisters without downtime.',
-    host: { name: 'Michael Lee', avatar: '/michael-lee-avatar.png', username: 'michael_l', rating: 4.6 },
-    date: '2024-08-22',
-    time: '09:00 AM UTC',
-    duration: 75,
-    maxAttendees: 40,
-    currentAttendees: 28,
-    price: 80,
-    isOnline: true,
-    location: 'Online',
-    type: 'live',
-    tags: ['ICP', 'Deployment', 'Canisters'],
-  },
-]
+import { useState, useEffect } from "react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import { Card } from "@/components/ui/card"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Plus, Search, Video, Mic, Users, Clock, Calendar, Play } from "lucide-react"
+import SessionCreationForm from "@/components/session-creation-form"
+import SessionView from "@/components/session-view"
+import { sessionClient, type Session } from "@/lib/session-client"
+import { useAuth } from "@/lib/auth-context"
+import { toast } from "@/hooks/use-toast"
 
 export default function TutorHubPage() {
-  const [searchTerm, setSearchTerm] = useState('')
-  const [activeTab, setActiveTab] = useState('all')
-  const [isSessionCreationModalOpen, setIsSessionCreationModalOpen] = useState(false)
+  const [showCreateForm, setShowCreateForm] = useState(false)
+  const [sessions, setSessions] = useState<Session[]>([])
+  const [loading, setLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [selectedSession, setSelectedSession] = useState<Session | null>(null)
+  const { user } = useAuth()
 
-  const filteredSessions = mockSessions.filter(session => {
-    const matchesSearch = session.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          session.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          session.host.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          session.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))
-    const matchesType = activeTab === 'all' || session.type === activeTab
+  useEffect(() => {
+    loadSessions()
+  }, [])
 
-    return matchesSearch && matchesType
-  })
-
-  const getSessionTypeIcon = (type: string) => {
-    switch (type) {
-      case 'live':
-        return <Video className="h-4 w-4 text-red-500" />
-      case 'q&a':
-        return <MessageSquare className="h-4 w-4 text-blue-500" />
-      case 'workshop':
-        return <Lightbulb className="h-4 w-4 text-purple-500" />
-      default:
-        return <Video className="h-4 w-4" />
+  const loadSessions = async () => {
+    try {
+      setLoading(true)
+      const allSessions = await sessionClient.getAllSessions()
+      setSessions(allSessions)
+    } catch (error) {
+      console.error("Failed to load sessions:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load sessions",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
     }
   }
 
+  const handleSessionCreated = (newSession: Session) => {
+    setSessions((prev) => [newSession, ...prev])
+    setShowCreateForm(false)
+    toast({
+      title: "Success!",
+      description: "Your session has been created and stored on the blockchain",
+    })
+  }
+
+  const filteredSessions = sessions.filter(
+    (session) =>
+      session.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      session.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      session.tags.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase())),
+  )
+
+  const formatDate = (timestamp: bigint) => {
+    const date = new Date(Number(timestamp) / 1000000)
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  }
+
+  const getStatusColor = (status: Session["status"]) => {
+    if ("live" in status) return "bg-red-500"
+    if ("scheduled" in status) return "bg-blue-500"
+    if ("completed" in status) return "bg-gray-500"
+    return "bg-yellow-500"
+  }
+
+  const getStatusText = (status: Session["status"]) => {
+    if ("live" in status) return "LIVE"
+    if ("scheduled" in status) return "UPCOMING"
+    if ("completed" in status) return "RECORDED"
+    return "CANCELLED"
+  }
+
+  if (selectedSession) {
+    return (
+      <SessionView 
+        session={selectedSession} 
+        onClose={() => setSelectedSession(null)} 
+      />
+    )
+  }
+
+  if (showCreateForm) {
+    return <SessionCreationForm onCancel={() => setShowCreateForm(false)} onSessionCreated={handleSessionCreated} />
+  }
+
   return (
-    <div className="flex flex-col gap-6 p-4 md:p-6">
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <h1 className="text-3xl font-bold">Tutor Hub</h1>
-        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-          <Button onClick={() => setIsSessionCreationModalOpen(true)} className="w-full sm:w-auto">
-            <PlusCircle className="h-4 w-4 mr-2" /> Create Session
-          </Button>
-          <div className="relative w-full sm:w-auto flex-grow sm:flex-grow-0">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="Search sessions or hosts..."
-              className="w-full pl-9 pr-4 py-2 rounded-md border border-input bg-background shadow-sm focus:outline-none focus:ring-1 focus:ring-primary"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
+    <div className="w-full h-full space-y-6 flex flex-col">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Tutor Hub</h1>
+          <p className="text-gray-600">Discover and join live learning sessions</p>
         </div>
+        <Button onClick={() => setShowCreateForm(true)} className="bg-blue-600 hover:bg-blue-700">
+          <Plus className="w-4 h-4 mr-2" />
+          Create Session
+        </Button>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 md:grid-cols-4 lg:grid-cols-4 h-auto">
-          <TabsTrigger value="all">All Sessions</TabsTrigger>
-          <TabsTrigger value="live">Live Classes</TabsTrigger>
-          <TabsTrigger value="q&a">Q&A Sessions</TabsTrigger>
-          <TabsTrigger value="workshop">Workshops</TabsTrigger>
-        </TabsList>
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+        <Input
+          placeholder="Search sessions..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-10"
+        />
+      </div>
 
-        <TabsContent value={activeTab} className="mt-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {filteredSessions.length > 0 ? (
-              filteredSessions.map(session => (
-                <Card key={session.id} className="flex flex-col overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between mb-2">
-                      <CardTitle className="text-lg font-semibold">{session.title}</CardTitle>
-                      <Badge variant="secondary" className="text-xs flex items-center gap-1">
-                        {getSessionTypeIcon(session.type)} {session.type.charAt(0).toUpperCase() + session.type.slice(1)}
-                      </Badge>
-                    </div>
-                    <CardDescription className="text-sm text-muted-foreground line-clamp-2">
-                      {session.description}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="p-4 pt-0 flex flex-col flex-grow justify-between">
-                    <div className="flex items-center gap-3 mb-3">
-                      <Avatar className="h-8 w-8">
-                        <AvatarImage src={session.host.avatar || "/placeholder.svg"} alt={session.host.name} />
-                        <AvatarFallback>{session.host.name.charAt(0)}</AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="font-medium text-sm">{session.host.name}</p>
-                        <div className="flex items-center text-xs text-muted-foreground">
-                          <Star className="h-3 w-3 fill-yellow-500 text-yellow-500 mr-1" /> {session.host.rating.toFixed(1)}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground mb-3">
-                      <div className="flex items-center gap-1">
-                        <Calendar className="h-4 w-4" /> {session.date}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Clock className="h-4 w-4" /> {session.time} ({session.duration} min)
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Users className="h-4 w-4" /> {session.currentAttendees}/{session.maxAttendees}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <MapPin className="h-4 w-4" /> {session.location}
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2 mb-3">
-                      {session.tags.map((tag, index) => (
-                        <Badge key={index} variant="outline" className="text-xs">{tag}</Badge>
-                      ))}
-                    </div>
-                    <div className="flex items-center justify-between mt-auto">
-                      <span className="text-lg font-bold text-primary flex items-center gap-1">
-                        <DollarSign className="h-5 w-5" /> {session.price} XP
-                      </span>
-                      <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                        Join Session
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
-            ) : (
-              <div className="col-span-full text-center text-muted-foreground py-10">
-                No sessions found matching your criteria.
-              </div>
-            )}
+      {/* Sessions Grid */}
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[...Array(6)].map((_, i) => (
+            <Card key={i} className="aspect-video bg-gray-100 animate-pulse" />
+          ))}
+        </div>
+      ) : filteredSessions.length === 0 ? (
+        <div className="text-center py-12">
+          <div className="w-24 h-24 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+            <Video className="w-12 h-12 text-gray-400" />
           </div>
-        </TabsContent>
-      </Tabs>
-      <SessionCreationModal isOpen={isSessionCreationModalOpen} onClose={() => setIsSessionCreationModalOpen(false)} />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No sessions found</h3>
+          <p className="text-gray-500 mb-6">
+            {searchQuery ? "Try adjusting your search terms" : "Be the first to create a learning session!"}
+          </p>
+          {!searchQuery && (
+            <Button onClick={() => setShowCreateForm(true)} className="bg-blue-600 hover:bg-blue-700">
+              <Plus className="w-4 h-4 mr-2" />
+              Create Your First Session
+            </Button>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredSessions.map((session) => (
+            <Card
+              key={session.id}
+              onClick={() => {
+                // Only allow joining if session is live or about to start soon
+                const now = Date.now() * 1000000; // Convert to nanoseconds
+                const startTime = Number(session.scheduledTime);
+                const endTime = startTime + (session.duration * 60 * 1000000000);
+                
+                if (now >= startTime - 300000000000 && now <= endTime) { // 5 minutes before start until end
+                  setSelectedSession(session);
+                } else if (now < startTime) {
+                  toast({
+                    title: "Session not started",
+                    description: "This session hasn't started yet. Please wait until the scheduled time.",
+                  });
+                } else {
+                  toast({
+                    title: "Session ended",
+                    description: "This session has already ended.",
+                  });
+                }
+              }}
+              className="group relative overflow-hidden bg-gradient-to-br from-gray-900 to-gray-800 text-white cursor-pointer hover:scale-105 transition-transform duration-200"
+            >
+              {/* Background Image */}
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-600/20 to-purple-600/20" />
+
+              {/* Status Badge */}
+              <div className="absolute top-3 left-3 z-10">
+                <Badge className={`${getStatusColor(session.status)} text-white border-0 text-xs font-medium`}>
+                  {getStatusText(session.status)}
+                </Badge>
+              </div>
+
+              {/* Session Type Icon */}
+              <div className="absolute top-3 right-3 z-10">
+                {"video" in session.sessionType ? (
+                  <Video className="w-5 h-5 text-white/80" />
+                ) : (
+                  <Mic className="w-5 h-5 text-white/80" />
+                )}
+              </div>
+
+              {/* Play Button Overlay */}
+              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-black/20">
+                <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">
+                  <Play className="w-8 h-8 text-white ml-1" />
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="relative p-4 h-full flex flex-col justify-end">
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-lg line-clamp-2">{session.title}</h3>
+
+                  <div className="flex items-center gap-2 text-sm text-white/80">
+                    <Avatar className="w-6 h-6">
+                      <AvatarImage src={session.hostAvatar || "/placeholder.svg"} />
+                      <AvatarFallback className="text-xs bg-white/20">
+                        {session.hostName.charAt(0).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span>{session.hostName}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-sm text-white/70">
+                    <div className="flex items-center gap-1">
+                      <Users className="w-4 h-4" />
+                      <span>
+                        {session.attendees.length}/{session.maxAttendees}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Clock className="w-4 h-4" />
+                      <span>{session.duration}m</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1 text-sm text-white/70">
+                    <Calendar className="w-4 h-4" />
+                    <span>{formatDate(session.scheduledTime)}</span>
+                  </div>
+
+                  {session.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {session.tags.slice(0, 2).map((tag) => (
+                        <Badge key={tag} variant="secondary" className="text-xs bg-white/20 text-white border-0">
+                          {tag}
+                        </Badge>
+                      ))}
+                      {session.tags.length > 2 && (
+                        <Badge variant="secondary" className="text-xs bg-white/20 text-white border-0">
+                          +{session.tags.length - 2}
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

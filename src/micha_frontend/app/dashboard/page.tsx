@@ -1,331 +1,665 @@
 "use client"
 
-import * as React from "react"
-import { Plus_Jakarta_Sans } from "next/font/google"
+import { useState, useEffect, useCallback } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Separator } from "@/components/ui/separator"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import {
-  ArrowUpRight,
-  Clock,
-  Flame,
+  Coins,
+  BookOpen,
+  Users,
+  MessageSquare,
+  Trophy,
   Plus,
+  Bell,
+  Target,
+  Zap,
+  CheckCircle,
+  AlertCircle,
   Sparkles,
-  CheckCircle2,
-  PlayCircle,
-  Star,
-  TrendingUp,
-  UploadCloud,
+  ArrowUp,
+  BarChart3,
+  Brain,
+  Code,
+  Lightbulb,
+  Rocket,
+  BookMarked,
+  Users2,
+  MessageCircle,
+  Video,
+  FileText,
+  Settings,
+  HelpCircle,
 } from "lucide-react"
-import XPurchaseModal from "@/components/xp-purchase-modal"
-import { cn } from "@/lib/utils"
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts"
+import { XPPurchaseModal } from "@/components/xp-purchase-modal"
+import { notificationsClient, type Activity } from "@/lib/notifications-client"
+import { useApiClients } from "@/lib/use-api-clients"
+import { socialClient, type PartnerProfile } from "@/lib/social-client"
+import { toast } from "sonner"
 
-// Apply Plus Jakarta Sans to dashboard texts
-const dashboardFont = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["400", "600", "700"],
-})
 
-// Simple inline SVG Bar Chart
-function BarChart({ values, labels }: { values: number[]; labels: string[] }) {
-  const max = Math.max(...values, 1)
-  return (
-    <div className="flex h-40 items-end gap-3">
-      {values.map((v, i) => {
-        const height = (v / max) * 100
-        return (
-          <div key={i} className="flex w-full flex-col items-center gap-2">
-            <div className="relative w-8 flex-1 rounded-lg bg-white/10">
-              <div
-                className="absolute bottom-0 left-0 w-full rounded-lg bg-gradient-to-t from-cyan-400 to-emerald-400"
-                style={{ height: `${height}%` }}
-              />
-            </div>
-            <span className="text-xs text-white/70">{labels[i]}</span>
-          </div>
-        )
-      })}
-    </div>
-  )
+interface ChartCourseProgress {
+  course: string;
+  value: number;
+  color: string;
+  percentage: number;
 }
 
-// Simple CSS donut chart using conic-gradient
-function DonutChart({ segments }: { segments: { value: number; color: string; label: string }[] }) {
-  const total = segments.reduce((a, b) => a + b.value, 0) || 1
-  let accum = 0
-  const gradient = segments
-    .map((s) => {
-      const start = (accum / total) * 100
-      accum += s.value
-      const end = (accum / total) * 100
-      return `${s.color} ${start}% ${end}%`
-    })
-    .join(", ")
-
-  return (
-    <div className="flex items-center gap-6">
-      <div className="grid place-items-center">
-        <div className="size-28 rounded-full" style={{ background: `conic-gradient(${gradient})` }}>
-          <div className="relative left-1/2 top-1/2 size-16 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/10 shadow-inner" />
-        </div>
-      </div>
-      <div className="space-y-2">
-        {segments.map((s) => (
-          <div key={s.label} className="flex items-center gap-2 text-sm text-white/80">
-            <span className="inline-block size-2.5 rounded-full" style={{ backgroundColor: s.color }} />
-            <span className="w-28">{s.label}</span>
-            <span className="tabular-nums">{Math.round((s.value / total) * 100)}%</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
+// To hold the detailed progress from the backend
+import { type CourseProgress } from "@/lib/learning-analytics-client";
 
 export default function DashboardPage() {
-  const [isXPPurchaseModalOpen, setIsXPPurchaseModalOpen] = React.useState(false)
+    const { learningAnalyticsClient, isAuthenticated, loading: authLoading, clientsInitialized } = useApiClients()
+  const [showXPModal, setShowXPModal] = useState(false)
+  const [weeklyData, setWeeklyData] = useState<any[]>([])
+    const [chartCourseProgress, setChartCourseProgress] = useState<ChartCourseProgress[]>([])
+  const [detailedCourseProgress, setDetailedCourseProgress] = useState<CourseProgress[]>([])
+  const [activities, setActivities] = useState<Activity[]>([])
+  const [partners, setPartners] = useState<PartnerProfile[]>([])
+  const [loading, setLoading] = useState(true)
+  const [totalCourses, setTotalCourses] = useState(0)
 
-  const weekly = [2, 3, 2.5, 4, 3.5, 2.8, 3.2] // hours
-  const labels = ["SAT", "SUN", "MON", "TUE", "WED", "THU", "FRI"]
+  // Show loading state while auth is initializing
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    )
+  }
 
-  const completion = [
-    { label: "Completed", value: 62, color: "#22c55e" },
-    { label: "In Progress", value: 18, color: "#38bdf8" },
-    { label: "Not Completed", value: 12, color: "#f59e0b" },
-    { label: "Not Started", value: 8, color: "#ef4444" },
-  ]
+  const loadDashboardData = useCallback(async () => {
+    if (!isAuthenticated) {
+      console.warn("User not authenticated, skipping dashboard data load");
+      setLoading(false);
+      return;
+    }
 
-  const notifications = [
-    {
-      icon: <Sparkles className="size-4 text-emerald-400" />,
-      title: "Clients comments on your Algorithm post",
-      time: "Yesterday",
-    },
-    {
-      icon: <CheckCircle2 className="size-4 text-cyan-400" />,
-      title: "You submitted your JavaScript quiz",
-      time: "Tuesday, 2:14 PM",
-    },
-    { icon: <Clock className="size-4 text-amber-400" />, title: "Task overdue by 13 hours", time: "30 June 2024" },
-    {
-      icon: <PlayCircle className="size-4 text-pink-400" />,
-      title: "New quiz and PHP course released",
-      time: "25 May 2024",
-    },
-  ]
+    setLoading(true);
+    try {
+      // Load learning analytics if client is available
+      if (learningAnalyticsClient) {
+        // Get weekly stats
+        try {
+          const analytics = await learningAnalyticsClient.getWeeklyStats();
+          if (analytics && Array.isArray(analytics.dailyHours)) {
+            const chartData = analytics.dailyHours.map((hours: number | bigint, index: number) => {
+              const hoursNum = typeof hours === 'bigint' ? Number(hours) : hours;
+              return {
+                day: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][index % 7],
+                hours: hoursNum,
+                xp: Math.round(hoursNum * 50),
+              };
+            });
+            setWeeklyData(chartData);
+          }
+        } catch (error) {
+          console.warn("Error loading weekly stats:", error);
+          setWeeklyData([]); // Clear data on error
+        }
 
-  const partners = [
-    { initials: "SC", name: "Sarah Chen", role: "Frontend Dev", xp: 21, color: "bg-fuchsia-500" },
-    { initials: "MR", name: "Mike Rodriguez", role: "Data Engineer", xp: 19, color: "bg-cyan-500" },
-    { initials: "EJ", name: "Emma Johnson", role: "UI/UX Designer", xp: 15, color: "bg-emerald-500" },
-    { initials: "DP", name: "David Park", role: "ML Researcher", xp: 12, color: "bg-amber-500" },
-    { initials: "LW", name: "Lisa Wang", role: "Mobile Engineer", xp: 8, color: "bg-purple-500" },
-  ]
+        // Get course stats
+        try {
+          const stats = await learningAnalyticsClient.getCourseStats();
+          if (stats) {
+            const completed = Number(stats.completed) || 0;
+            const inProgress = Number(stats.inProgress) || 0;
+            const paused = Number(stats.paused) || 0;
+            const notStarted = Number(stats.notStarted) || 0;
+            const total = completed + inProgress + paused + notStarted;
+            const totalCourses = Math.max(1, total);
+            setTotalCourses(total);
 
-  const recs = [
-    {
-      tag: "BEGINNER",
-      title: "Beginner's Guide To Becoming A Professional Frontend Developer",
-      author: "Mohammad Shame Tefenz",
-      role: "UI / UX Designer",
-      color: "from-fuchsia-500 to-pink-400",
-    },
-    {
-      tag: "INTERMEDIATE",
-      title: "How To Create Your Portfolio Website",
-      author: "Sarah Johnson",
-      role: "Frontend Developer",
-      color: "from-amber-400 to-yellow-400",
-    },
-    {
-      tag: "FRONTEND",
-      title: "Beginner's Guide To Becoming A Professional Frontend Developer",
-      author: "Prashant Kumar Singh",
-      role: "Software Developer",
-      color: "from-cyan-400 to-sky-400",
-    },
-  ]
+            const progressData: ChartCourseProgress[] = [
+              {
+                course: "Completed",
+                value: completed,
+                color: "#0ea5e9",
+                percentage: Math.round((completed / totalCourses) * 100),
+              },
+              {
+                course: "In Progress",
+                value: inProgress,
+                color: "#38bdf8",
+                percentage: Math.round((inProgress / totalCourses) * 100),
+              },
+              {
+                course: "Paused",
+                value: paused,
+                color: "#7dd3fc",
+                percentage: Math.round((paused / totalCourses) * 100),
+              },
+              {
+                course: "Not Started",
+                value: notStarted,
+                color: "#bae6fd",
+                percentage: Math.round((notStarted / totalCourses) * 100),
+              },
+            ];
+            setChartCourseProgress(progressData);
+          }
+        } catch (error) {
+                    console.warn("Error loading course stats:", error);
+          setChartCourseProgress([]); // Clear data on error
+        }
+
+        // Get detailed course progress for XP
+        try {
+          const detailedProgressData = await learningAnalyticsClient.getMyCourseProgress();
+          if (detailedProgressData) {
+            setDetailedCourseProgress(detailedProgressData);
+          }
+        } catch (error) {
+          console.warn("Failed to load detailed course progress:", error);
+          setDetailedCourseProgress([]);
+        }
+
+        // Get learning partners
+        try {
+          console.log('Fetching learning partners...');
+          const partnersData = await socialClient.getMyPartners();
+          console.log('Received partners data:', partnersData);
+          if (partnersData && Array.isArray(partnersData)) {
+            setPartners(partnersData);
+          } else {
+            console.warn('Invalid partners data format:', partnersData);
+            setPartners([]);
+          }
+        } catch (error) {
+          console.error("Failed to load learning partners:", error);
+          toast.error("Failed to load learning partners");
+          setPartners([]);
+        }
+
+        // Get recent activities
+        try {
+          console.log('Fetching recent activities...');
+          const userActivities = await notificationsClient.getMyActivities(5);
+          console.log('Received activities:', userActivities);
+          if (userActivities && Array.isArray(userActivities)) {
+            setActivities(userActivities);
+          } else {
+            console.warn('Invalid activities data format:', userActivities);
+            setActivities([]);
+          }
+        } catch (error) {
+          console.error("Failed to load activities:", error);
+          toast.error("Failed to load recent activities");
+          setActivities([]);
+        }
+      }
+    } catch (error) {
+      console.error("Error loading dashboard data:", error);
+      toast.error("Failed to load dashboard data");
+    } finally {
+      setLoading(false);
+    }
+  }, [isAuthenticated, learningAnalyticsClient]);
+
+  // Load data on component mount and when dependencies change
+    useEffect(() => {
+    const initDashboard = async () => {
+      // Only load data if clients are initialized and user is authenticated.
+      if (clientsInitialized && isAuthenticated) {
+        try {
+          await loadDashboardData();
+        } catch (error) {
+          console.error("Failed to initialize dashboard:", error);
+          setLoading(false);
+        }
+      } else if (clientsInitialized && !isAuthenticated) {
+        // If clients are initialized but user is not authenticated, stop loading.
+        setLoading(false);
+      }
+    };
+
+    initDashboard();
+  }, [clientsInitialized, isAuthenticated, loadDashboardData]);
+
+  
+
+  // Format relative time function for activity timestamps
+  const formatRelativeTime = (timestamp: bigint | number): string => {
+    const date = new Date(Number(timestamp) * 1000); // Convert seconds to milliseconds
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffHours < 1) return "Just now";
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
+  }
+
+  // Get appropriate icon for different activity types
+  const getActivityIcon = (activityType: { [key: string]: any }) => {
+    if ("comment" in activityType) return <MessageSquare className="h-4 w-4" />
+    if ("quiz_completed" in activityType) return <CheckCircle className="h-4 w-4" />
+    if ("deadline_approaching" in activityType) return <AlertCircle className="h-4 w-4" />
+    if ("course_available" in activityType) return <BookOpen className="h-4 w-4" />
+    if ("achievement_earned" in activityType) return <Trophy className="h-4 w-4" />
+    if ("session_joined" in activityType) return <Users className="h-4 w-4" />
+    return <Bell className="h-4 w-4" />
+  }
+
+  // Get color for different activity types
+  const getActivityColor = (activityType: { [key: string]: any }) => {
+    if ("comment" in activityType) return "text-sky-600"
+    if ("quiz_completed" in activityType) return "text-sky-600"
+    if ("deadline_approaching" in activityType) return "text-sky-600"
+    if ("course_available" in activityType) return "text-sky-600"
+    if ("achievement_earned" in activityType) return "text-sky-600"
+    if ("session_joined" in activityType) return "text-sky-600"
+    return "text-sky-600"
+  }
+
+  // Custom tooltip for charts
+  interface TooltipProps {
+    active?: boolean;
+    payload?: Array<{
+      payload: {
+        course: string;
+        value: number;
+        percentage?: number;
+      };
+    }>;
+  }
+
+  const CustomTooltip = ({ active, payload }: TooltipProps) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload
+      return (
+        <div className="bg-white p-3 rounded-lg shadow-lg border border-sky-200">
+          <p className="font-medium text-sky-800">{data.course}</p>
+          <p className="text-sm text-sky-600">{`${data.value} courses (${data.percentage}%)`}</p>
+        </div>
+      )
+    }
+    return null
+  }
 
   return (
-    <div className={cn("grid gap-6 lg:grid-cols-3 text-white", dashboardFont.className)}>
-      {/* Left 2 columns */}
-      <div className="space-y-6 lg:col-span-2">
-        {/* XP Balance with conic backplate */}
-        <Card className="overflow-hidden border-emerald-400/20 bg-slate-900/50">
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0 -z-10 opacity-30"
-            style={{
-              background:
-                "conic-gradient(from 180deg at 50% 50%, rgba(56,189,248,0.35), rgba(16,185,129,0.25), rgba(99,102,241,0.25), rgba(56,189,248,0.35))",
-              maskImage: "radial-gradient(ellipse at center, black 40%, transparent 75%)",
-              WebkitMaskImage: "radial-gradient(ellipse at center, black 40%, transparent 75%)",
-            }}
-          />
-          <CardContent className="p-5">
-            <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-start">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm text-white/80">
-                  <Flame className="size-4 text-amber-300" />
-                  <span>XP Balance</span>
-                </div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <Button
-                    size="sm"
-                    onClick={() => setIsXPPurchaseModalOpen(true)}
-                    className="rounded-full bg-white/20 text-white hover:bg-white/30"
-                  >
-                    <Plus className="mr-1 size-4" /> Add More XP
-                  </Button>
-                  <p className="text-sm text-white/80">137 Contributions made this month!</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-3xl font-bold tracking-tight">17,395.54</div>
-                <div className="text-xs text-white/70">xp</div>
-              </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
+      <div className="flex gap-6 p-6">
+        {/* Main Content - Left Side */}
+        <div className="flex-1 space-y-6">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-sky-700 to-cyan-600 bg-clip-text text-transparent">
+                Dashboard Overview
+              </h1>
+              <p className="text-sky-600/70 mt-1">Welcome back! Here's your learning progress.</p>
             </div>
-          </CardContent>
-        </Card>
+          </div>
 
-        {/* Time Spent + Course Completion */}
-        <div className="grid gap-6 md:grid-cols-2">
-          <Card className="border-amber-400/20 bg-gradient-to-br from-amber-700/20 to-rose-500/10 text-white">
-            <CardContent className="p-5">
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-white/90">Time Spent</h3>
-                <Badge className="bg-white/10 text-white/80">This Week</Badge>
+          {/* XP Balance Card */}
+          <Card className="bg-gradient-to-br from-sky-50/80 via-sky-100/50 to-cyan-50/50 border-sky-200/50 shadow-lg shadow-sky-100/50">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <div className="p-3 rounded-full bg-gradient-to-r from-sky-500 to-cyan-500">
+                    <Coins className="h-6 w-6 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-sky-600">XP Balance</p>
+                    <p className="text-3xl font-bold text-sky-800">{detailedCourseProgress.reduce((acc, p) => acc + Number(p.xpEarned), 0).toLocaleString()}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                                    <Button
+                    onClick={() => setShowXPModal(true)}
+                    className="bg-gradient-to-r from-sky-500 to-cyan-500 hover:from-sky-600 hover:to-cyan-600 text-white"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Buy XP
+                  </Button>
+                </div>
               </div>
-              <BarChart values={weekly} labels={labels} />
             </CardContent>
           </Card>
 
-          <Card className="border-emerald-400/20 bg-gradient-to-br from-emerald-700/20 to-lime-500/10 text-white">
-            <CardContent className="p-5">
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-white/90">Course Completion</h3>
-                <Badge className="bg-white/10 text-white/80">Overview</Badge>
+          {/* Weekly Learning Chart */}
+          <Card className="bg-gradient-to-br from-sky-50/80 via-sky-100/50 to-cyan-50/50 border-sky-200/50 shadow-lg shadow-sky-100/50">
+            <CardHeader>
+              <CardTitle className="flex items-center text-sky-800">
+                <BarChart3 className="h-5 w-5 mr-2 text-sky-600" />
+                Weekly Learning Activity
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={weeklyData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e0f2fe" />
+                    <XAxis dataKey="day" stroke="#0369a1" />
+                    <YAxis stroke="#0369a1" />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "#f0f9ff",
+                        border: "1px solid #0ea5e9",
+                        borderRadius: "8px",
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="hours"
+                      stroke="#0ea5e9"
+                      strokeWidth={3}
+                      dot={{ fill: "#0ea5e9", strokeWidth: 2, r: 4 }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="xp"
+                      stroke="#06b6d4"
+                      strokeWidth={2}
+                      dot={{ fill: "#06b6d4", strokeWidth: 2, r: 3 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
               </div>
-              <DonutChart segments={completion} />
+            </CardContent>
+          </Card>
+
+          {/* Course Progress Donut Chart */}
+          <Card className="bg-gradient-to-br from-sky-50/80 via-sky-100/50 to-cyan-50/50 border-sky-200/50 shadow-lg shadow-sky-100/50">
+            <CardHeader>
+              <CardTitle className="flex items-center text-sky-800">
+                <Target className="h-5 w-5 mr-2 text-sky-600" />
+                Course Progress Overview
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                {/* Donut Chart */}
+                <div className="h-64 w-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={chartCourseProgress}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={100}
+                        paddingAngle={2}
+                        dataKey="value"
+                      >
+                        {chartCourseProgress.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip content={<CustomTooltip />} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Legend and Stats */}
+                <div className="flex-1 ml-8 space-y-4">
+                  <div className="text-center mb-6">
+                    <p className="text-2xl font-bold text-sky-800">{totalCourses}</p>
+                    <p className="text-sm text-sky-600">Total Courses</p>
+                  </div>
+
+                  <div className="space-y-3">
+                    {chartCourseProgress.map((item, index) => (
+                      <div key={index} className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-4 h-4 rounded-full" style={{ backgroundColor: item.color }} />
+                          <span className="text-sm font-medium text-sky-700">{item.course}</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-sm font-bold text-sky-800">{item.value}</span>
+                          <span className="text-xs text-sky-600 ml-1">({item.percentage}%)</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-6 p-3 rounded-lg bg-sky-50/50 border border-sky-200/30">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-sky-600">Completion Rate</span>
+                      <span className="font-bold text-sky-800">
+                        {chartCourseProgress.length > 0 && chartCourseProgress[0].value > 0
+                          ? Math.round(
+                              (chartCourseProgress[0].value / chartCourseProgress.reduce((sum, item) => sum + item.value, 0)) * 100,
+                            )
+                          : 0}
+                        %
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Recommendations */}
+          <Card className="bg-gradient-to-br from-sky-50/80 via-sky-100/50 to-cyan-50/50 border-sky-200/50 shadow-lg shadow-sky-100/50">
+            <CardHeader>
+              <CardTitle className="flex items-center text-sky-800">
+                <Lightbulb className="h-5 w-5 mr-2 text-sky-600" />
+                Recommendations for You
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex items-start space-x-3 p-3 rounded-lg bg-sky-50/50 border border-sky-200/30">
+                  <div className="p-2 rounded-full bg-gradient-to-r from-sky-400 to-cyan-400">
+                    <Code className="h-4 w-4 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-medium text-sky-800">Advanced React Patterns</h4>
+                    <p className="text-sm text-sky-600 mt-1">
+                      Based on your progress in React fundamentals, this course will help you master advanced concepts.
+                    </p>
+                    <Badge className="mt-2 bg-sky-200/50 text-sky-700 border-sky-300/50">Recommended</Badge>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-3 p-3 rounded-lg bg-sky-50/50 border border-sky-200/30">
+                  <div className="p-2 rounded-full bg-gradient-to-r from-cyan-400 to-blue-400">
+                    <Brain className="h-4 w-4 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-medium text-sky-800">TypeScript Deep Dive</h4>
+                    <p className="text-sm text-sky-600 mt-1">
+                      Enhance your TypeScript skills with advanced type system features and best practices.
+                    </p>
+                    <Badge className="mt-2 bg-sky-200/50 text-sky-700 border-sky-300/50">Popular</Badge>
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Things That Might Interest You */}
-        <Card className="border-fuchsia-400/20 bg-gradient-to-r from-fuchsia-600/10 to-violet-600/10 text-white">
-          <CardContent className="p-5">
-            <div className="mb-5 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-white/90">Things That Might Interest You</h3>
-              <Button variant="ghost" size="sm" className="text-white/80 hover:bg-white/10">
-                View All <ArrowUpRight className="ml-1 size-4" />
-              </Button>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {recs.map((r, i) => (
-                <div
-                  key={i}
-                  className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-4"
-                >
-                  <div className={cn("absolute inset-0 -z-10 bg-gradient-to-r opacity-20 blur-xl", r.color)} />
-                  <div className="mb-3">
-                    <Badge className="rounded-full bg-white/10 px-3 text-[10px] tracking-wide text-white/80">
-                      {r.tag}
-                    </Badge>
-                  </div>
-                  <div className="mb-6 flex items-center justify-between">
-                    <h4 className="line-clamp-2 text-sm font-semibold">{r.title}</h4>
-                    <PlayCircle className="ml-3 shrink-0 text-white/70" />
-                  </div>
-                  <div className="flex items-center gap-3 text-xs text-white/70">
-                    <div className="grid size-8 place-items-center rounded-full bg-white/10">
-                      <Star className="size-4 text-amber-300" />
+        {/* Right Sidebar - Fixed Width with Independent Scrolling */}
+        <div className="w-80 sticky top-6 h-[calc(100vh-3rem)] overflow-hidden">
+          <ScrollArea className="h-full pr-2">
+            <div className="space-y-6">
+              {/* Recent Activities */}
+              <Card className="bg-gradient-to-br from-sky-50/80 via-sky-100/50 to-cyan-50/50 border-sky-200/50 shadow-lg shadow-sky-100/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center text-sky-800 text-lg">
+                    <Bell className="h-5 w-5 mr-2 text-sky-600" />
+                    Recent Activities
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {loading ? (
+                    <div className="space-y-3">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="animate-pulse">
+                          <div className="h-4 bg-sky-200/50 rounded w-3/4 mb-2"></div>
+                          <div className="h-3 bg-sky-200/30 rounded w-1/2"></div>
+                        </div>
+                      ))}
                     </div>
-                    <div>
-                      <div className="font-medium text-white/90">{r.author}</div>
-                      <div>{r.role}</div>
+                  ) : activities.length > 0 ? (
+                    activities.map((activity) => (
+                      <div
+                        key={activity.id}
+                        className="flex items-start space-x-3 p-3 rounded-lg bg-sky-50/30 border border-sky-200/20 hover:bg-sky-100/40 transition-colors"
+                      >
+                        <div className={`p-1.5 rounded-full bg-sky-100/50 ${getActivityColor(activity.activityType)}`}>
+                          {getActivityIcon(activity.activityType)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-sky-800 truncate">{activity.title}</p>
+                          {activity.description && (
+                            <p className="text-xs text-sky-600 mt-1 line-clamp-2">{activity.description}</p>
+                          )}
+                          <p className="text-xs text-sky-500 mt-1">{formatRelativeTime(activity.timestamp)}</p>
+                        </div>
+                        {!activity.isRead && <div className="w-2 h-2 bg-sky-500 rounded-full mt-2"></div>}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-6">
+                      <Bell className="h-8 w-8 text-sky-400 mx-auto mb-2" />
+                      <p className="text-sm text-sky-600">No recent activities</p>
                     </div>
-                  </div>
-                </div>
-              ))}
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Learning Partners */}
+              <Card className="bg-gradient-to-br from-sky-50/80 via-sky-100/50 to-cyan-50/50 border-sky-200/50 shadow-lg shadow-sky-100/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center text-sky-800 text-lg">
+                    <Users2 className="h-5 w-5 mr-2 text-sky-600" />
+                    Learning Partners
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {loading ? (
+                    <div className="space-y-3">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="flex items-center space-x-3 animate-pulse">
+                          <div className="w-10 h-10 bg-sky-200/50 rounded-full"></div>
+                          <div className="flex-1">
+                            <div className="h-4 bg-sky-200/50 rounded w-3/4 mb-1"></div>
+                            <div className="h-3 bg-sky-200/30 rounded w-1/2"></div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : partners.length > 0 ? (
+                    partners.map((partner) => (
+                      <div
+                        key={partner.principal}
+                        className="flex items-center space-x-3 p-3 rounded-lg bg-sky-50/30 border border-sky-200/20 hover:bg-sky-100/40 transition-colors"
+                      >
+                        <div className="relative">
+                          <Avatar className="h-10 w-10">
+                            <AvatarFallback className={`${partner.avatarColor} text-white text-sm font-medium`}>
+                              {partner.initials}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div
+                            className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${
+                              partner.onlineStatus === "online"
+                                ? "bg-emerald-500"
+                                : partner.onlineStatus === "away"
+                                  ? "bg-amber-500"
+                                  : "bg-gray-400"
+                            }`}
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-sky-800 truncate">{partner.name}</p>
+                          <p className="text-xs text-sky-600">{partner.role}</p>
+                          <div className="flex items-center mt-1">
+                            <Zap className="h-3 w-3 text-sky-500 mr-1" />
+                            <span className="text-xs text-sky-600">{partner.xp.toLocaleString()} XP</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-6">
+                      <Users2 className="h-8 w-8 text-sky-400 mx-auto mb-2" />
+                      <p className="text-sm text-sky-600">No learning partners yet</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Quick Actions */}
+              <Card className="bg-gradient-to-br from-sky-50/80 via-sky-100/50 to-cyan-50/50 border-sky-200/50 shadow-lg shadow-sky-100/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center text-sky-800 text-lg">
+                    <Rocket className="h-5 w-5 mr-2 text-sky-600" />
+                    Quick Actions
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start text-sky-700 hover:bg-sky-100/50 hover:text-sky-800"
+                  >
+                    <BookMarked className="h-4 w-4 mr-3" />
+                    Start Learning Session
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start text-sky-700 hover:bg-sky-100/50 hover:text-sky-800"
+                  >
+                    <Video className="h-4 w-4 mr-3" />
+                    Join Study Group
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start text-sky-700 hover:bg-sky-100/50 hover:text-sky-800"
+                  >
+                    <MessageCircle className="h-4 w-4 mr-3" />
+                    Ask for Help
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start text-sky-700 hover:bg-sky-100/50 hover:text-sky-800"
+                  >
+                    <FileText className="h-4 w-4 mr-3" />
+                    Take Practice Quiz
+                  </Button>
+                  <Separator className="my-3 bg-sky-200/30" />
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start text-sky-700 hover:bg-sky-100/50 hover:text-sky-800"
+                  >
+                    <Settings className="h-4 w-4 mr-3" />
+                    Settings
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start text-sky-700 hover:bg-sky-100/50 hover:text-sky-800"
+                  >
+                    <HelpCircle className="h-4 w-4 mr-3" />
+                    Help & Support
+                  </Button>
+                </CardContent>
+              </Card>
             </div>
-          </CardContent>
-        </Card>
+          </ScrollArea>
+        </div>
       </div>
 
-      {/* Right column */}
-      <div className="space-y-6">
-        {/* Notifications */}
-        <Card className="border-pink-400/20 bg-gradient-to-br from-pink-700/20 to-rose-500/10 text-white">
-          <CardContent className="p-5">
-            <h3 className="mb-4 text-sm font-semibold text-white/90">Notifications</h3>
-            <div className="space-y-4">
-              {notifications.map((n, idx) => (
-                <div key={idx} className="flex items-start gap-3">
-                  <div className="grid size-8 place-items-center rounded-lg bg-white/10">{n.icon}</div>
-                  <div className="min-w-0">
-                    <p className="text-sm">{n.title}</p>
-                    <p className="text-xs text-white/60">{n.time}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Frequent Learning Partners */}
-        <Card className="border-purple-400/20 bg-gradient-to-br from-purple-700/20 to-violet-600/10 text-white">
-          <CardContent className="p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-white/90">Frequent Learning Partners</h3>
-              <Badge className="bg-white/10 text-white/80">Top</Badge>
-            </div>
-            <div className="space-y-3">
-              {partners.map((p, i) => (
-                <div
-                  key={i}
-                  className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-3"
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={cn(
-                        "grid size-9 place-items-center rounded-full text-sm font-semibold text-white",
-                        p.color,
-                      )}
-                    >
-                      {p.initials}
-                    </div>
-                    <div>
-                      <div className="text-sm font-medium">{p.name}</div>
-                      <div className="text-xs text-white/70">{p.role}</div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <TrendingUp className="size-4 text-emerald-400" />
-                    <span className="text-xs text-white/80">{p.xp} xp</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Quick Upload (hybrid storage hint) */}
-        <Card className="border-teal-400/20 bg-gradient-to-br from-teal-700/20 to-emerald-600/10 text-white">
-          <CardContent className="p-5">
-            <h3 className="mb-3 text-sm font-semibold text-white/90">Quick Upload</h3>
-            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-white/10 px-3 py-2 text-xs hover:bg-white/15">
-              <UploadCloud className="h-4 w-4" />
-              Upload & Link
-              <input type="file" className="sr-only" />
-            </label>
-            <p className="mt-2 text-xs text-white/60">
-              Store large media in an Asset canister and keep URLs in your on-chain profile.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <XPurchaseModal isOpen={isXPPurchaseModalOpen} onClose={() => setIsXPPurchaseModalOpen(false)} />
-    </div>
-  )
+<XPPurchaseModal isOpen={showXPModal} onClose={() => setShowXPModal(false)} />
+</div>
+)
 }

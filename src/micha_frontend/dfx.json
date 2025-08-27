@@ -1,0 +1,48 @@
+{
+  "canisters": {
+    "ecre": {
+      "frontend": {
+        "entrypoint": "app/index.html"
+      },
+      "source": ["dist"],
+      "type": "assets"
+    },
+    "sessions": {
+      "main": "backend/sessions/main.mo",
+      "type": "motoko",
+      "heartbeat": "heartbeat"
+    },
+    "notifications": {
+      "main": "backend/notifications/main.mo",
+      "type": "motoko"
+    },
+    "social": {
+      "main": "backend/social/main.mo",
+      "type": "motoko"
+    },
+    "user_profile": {
+      "main": "backend/user-profile/main.mo",
+      "type": "motoko"
+    }
+  },
+  "defaults": {
+    "build": {
+      "packtool": ""
+    }
+  },
+  "networks": {
+    "local": {
+      "bind": "127.0.0.1:4943",
+      "type": "ephemeral"
+    }
+  },
+  "http": {
+    "headers": {
+      "Access-Control-Allow-Origin": ["*"],
+      "Access-Control-Allow-Methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      "Access-Control-Allow-Headers": ["Content-Type", "Authorization"],
+      "Access-Control-Allow-Credentials": ["true"]
+    }
+  },
+  "version": 1
+}

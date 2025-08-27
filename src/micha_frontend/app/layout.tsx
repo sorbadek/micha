@@ -5,6 +5,7 @@ import './globals.css'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/toaster'
 import { AuthProvider } from '@/lib/auth-context'
+import { Providers } from '@/components/providers'
 
 const inter = Inter({ subsets: ['latin'] })
 const kalam = Kalam({ 
@@ -16,6 +17,7 @@ const kalam = Kalam({
 export const metadata: Metadata = {
   title: 'PeerVerse - Learn Together, Grow Forever',
   description: 'Connect with peers, share knowledge, and unlock your potential in our vibrant learning community',
+    generator: 'v0.app'
 }
 
 export default function RootLayout({
@@ -32,10 +34,12 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <AuthProvider>
-            {children}
-            <Toaster />
-          </AuthProvider>
+          <Providers>
+            <AuthProvider>
+              {children}
+              <Toaster />
+            </AuthProvider>
+          </Providers>
         </ThemeProvider>
       </body>
     </html>

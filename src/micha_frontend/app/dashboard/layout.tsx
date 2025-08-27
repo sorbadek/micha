@@ -4,21 +4,30 @@ import type { ReactNode } from "react"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import AppSidebar from "@/components/app-sidebar"
 import styles from "@/components/no-scrollbar.module.css"
+import { withAuth } from "@/components/auth/protected-route"
 
-export default function DashboardLayout({ children }: { children: ReactNode }) {
+function DashboardLayoutContent({ children }: { children: ReactNode }) {
   return (
     <SidebarProvider defaultOpen>
-      <div className="flex h-svh overflow-hidden">
-        {/* Fixed sidebar (handled by your AppSidebar implementation) */}
+      <div className="flex h-screen w-full overflow-hidden">
+        {/* Fixed sidebar */}
         <AppSidebar />
 
-        {/* Main content: independent scroll with hidden scrollbar and light blue background */}
-        <main className="flex min-w-0 flex-1 flex-col bg-sky-50">
-          <div className={`min-h-0 flex-1 overflow-y-auto ${styles.noScrollbar}`}>
-            <div className="mx-auto w-full max-w-7xl p-4 md:p-6">{children}</div>
+        {/* Main content area */}
+        <main className="flex-1 flex flex-col min-h-0 bg-sky-50">
+          <div className={`flex-1 overflow-y-auto ${styles.noScrollbar}`}>
+            <div className="h-full w-full p-4 md:p-6">{children}</div>
           </div>
         </main>
       </div>
     </SidebarProvider>
   )
 }
+
+// Wrap the dashboard layout with authentication
+const DashboardLayout = withAuth(DashboardLayoutContent, {
+  redirectTo: '/',
+  requireAuth: true
+})
+
+export default DashboardLayout

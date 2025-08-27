@@ -1,87 +1,83 @@
-import type { IDL } from "@dfinity/candid"
+export const idlFactory = ({ IDL }: any) => {
+  const SessionType = IDL.Variant({
+    video: IDL.Null,
+    voice: IDL.Null,
+  })
 
-// TypeScript types for convenience on the frontend
-export type Session = {
-  id: string
-  title: string
-  description: string
-  sessionType: string
-  date: string
-  time: string
-  durationMins: number
-  maxAttendees: number
-  priceXp: number
-  isOnline: boolean
-  location: string
-  meetingUrl?: string | null
-  owner: string // principal text
-  createdAtNs: bigint
-  startsAtNs: bigint
-}
-
-export type CreateSessionInput = {
-  title: string
-  description: string
-  sessionType: string
-  date: string
-  time: string
-  durationMins: number
-  maxAttendees: number
-  priceXp: number
-  isOnline: boolean
-  location: string
-  meetingUrl?: string | null
-}
-
-// Candid factory that matches the canister interface.
-// Adjust on the backend to keep these in sync.
-export const idlFactory: IDL.InterfaceFactory = ({ IDL }) => {
-  const Text = IDL.Text
-  const Bool = IDL.Bool
-  const Nat32 = IDL.Nat32
-  const Nat64 = IDL.Nat64
-  const Principal = IDL.Principal
-  const OptText = IDL.Opt(Text)
+  const SessionStatus = IDL.Variant({
+    scheduled: IDL.Null,
+    live: IDL.Null,
+    completed: IDL.Null,
+    cancelled: IDL.Null,
+  })
 
   const CreateSessionInput = IDL.Record({
-    title: Text,
-    description: Text,
-    sessionType: Text,
-    date: Text,
-    time: Text,
-    durationMins: Nat32,
-    maxAttendees: Nat32,
-    priceXp: Nat32,
-    isOnline: Bool,
-    location: Text,
-    meetingUrl: OptText,
+    title: IDL.Text,
+    description: IDL.Text,
+    sessionType: SessionType,
+    scheduledTime: IDL.Int,
+    duration: IDL.Nat,
+    maxAttendees: IDL.Nat,
+    hostName: IDL.Text,
+    hostAvatar: IDL.Text,
+    tags: IDL.Vec(IDL.Text),
   })
 
   const Session = IDL.Record({
-    id: Text,
-    title: Text,
-    description: Text,
-    sessionType: Text,
-    date: Text,
-    time: Text,
-    durationMins: Nat32,
-    maxAttendees: Nat32,
-    priceXp: Nat32,
-    isOnline: Bool,
-    location: Text,
-    meetingUrl: OptText,
-    owner: Principal,
-    createdAtNs: Nat64,
-    startsAtNs: Nat64,
+    id: IDL.Text,
+    title: IDL.Text,
+    description: IDL.Text,
+    sessionType: SessionType,
+    scheduledTime: IDL.Int,
+    duration: IDL.Nat,
+    maxAttendees: IDL.Nat,
+    hostName: IDL.Text,
+    hostAvatar: IDL.Text,
+    tags: IDL.Vec(IDL.Text),
+    attendees: IDL.Vec(IDL.Principal),
+    status: SessionStatus,
+    createdAt: IDL.Int,
+    recordingUrl: IDL.Opt(IDL.Text),
+    meetingUrl: IDL.Opt(IDL.Text),
+  })
+
+  const Result = IDL.Variant({ ok: Session, err: IDL.Text })
+  const Result_1 = IDL.Variant({ ok: IDL.Bool, err: IDL.Text })
+
+  const UpdateSessionInput = IDL.Record({
+    id: IDL.Text,
+    title: IDL.Opt(IDL.Text),
+    description: IDL.Opt(IDL.Text),
+    scheduledTime: IDL.Opt(IDL.Int),
+    duration: IDL.Opt(IDL.Nat),
+    maxAttendees: IDL.Opt(IDL.Nat),
+    status: IDL.Opt(SessionStatus),
+    recordingUrl: IDL.Opt(IDL.Text),
+    meetingUrl: IDL.Opt(IDL.Text),
   })
 
   return IDL.Service({
-    create_session: IDL.Func([CreateSessionInput], [Session], []),
-    list_my_sessions: IDL.Func([], [IDL.Vec(Session)], ["query"]),
-    get_session: IDL.Func([Text], [IDL.Opt(Session)], ["query"]),
+    createSession: IDL.Func([CreateSessionInput], [Result], []),
+    deleteSession: IDL.Func([IDL.Text], [Result_1], []),
+    getAllSessions: IDL.Func([], [IDL.Vec(Session)], ["query"]),
+    getMySessions: IDL.Func([], [IDL.Vec(Session)], []),
+    getSession: IDL.Func([IDL.Text], [IDL.Opt(Session)], ["query"]),
+    getSessionsByStatus: IDL.Func([SessionStatus], [IDL.Vec(Session)], ["query"]),
+    getSessionsByType: IDL.Func([SessionType], [IDL.Vec(Session)], ["query"]),
+    getStats: IDL.Func(
+      [],
+      [
+        IDL.Record({
+          totalSessions: IDL.Nat,
+          totalUsers: IDL.Nat,
+          liveSessions: IDL.Nat,
+          completedSessions: IDL.Nat,
+        }),
+      ],
+      ["query"],
+    ),
+    joinSession: IDL.Func([IDL.Text], [Result], []),
+    searchSessions: IDL.Func([IDL.Text], [IDL.Vec(Session)], ["query"]),
+    updateSession: IDL.Func([UpdateSessionInput], [Result], []),
   })
-}
-
-export const init = ({ IDL }: { IDL: typeof import("@dfinity/candid").IDL }) => {
-  return []
 }

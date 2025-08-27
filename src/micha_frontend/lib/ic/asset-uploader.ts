@@ -92,7 +92,7 @@ export async function uploadToAssetCanister(file: File, key: string, identity?: 
 
   // 4. Build URL (ic0.app gateway)
   const host = location.hostname.includes('localhost') || location.hostname.includes('127.0.0.1')
-    ? `https://ic0.app`
+    ? `http://127.0.0.1:4943`
     : `https://${ASSET_CANISTER_ID}.ic0.app`
 
   const url = host.includes('4943')

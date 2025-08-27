@@ -1,7 +1,15 @@
-'use client'
+"use client"
 
-import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { AuthClient } from '@dfinity/auth-client'
+import type React from "react"
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react"
+import { AuthClient, Identity } from "@dfinity/auth-client"
+import { SessionClient } from "./session-client"
+
+declare module "./session-client" {
+  interface SessionClient {
+    setIdentity: (identity: Identity) => void;
+  }
+}
 
 interface User {
   id: string
@@ -10,7 +18,7 @@ interface User {
   avatar?: string
   xp?: number
   reputation?: number
-  principal?: string
+  principal?: string // This is the PRIMARY IDENTIFIER
 }
 
 interface AuthContextType {
@@ -19,39 +27,87 @@ interface AuthContextType {
   login: () => Promise<void>
   logout: () => Promise<void>
   loading: boolean
+  authClient: AuthClient | null
+  sessionClient: SessionClient | null
+  identity: Identity | null
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
+export const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 // Identity Provider URLs
-const II_PROD_URL = 'https://identity.ic0.app'
-// If you run a local II canister with dfx start and dfx deploy internet_identity
-// this URL is typically the default:
-const II_LOCAL_URL = 'https://identity.ic0.app'
+const II_PROD_URL = "https://identity.ic0.app"
+const II_LOCAL_URL = "https://identity.ic0.app"
 
-// 8 hours in nanoseconds for maxTimeToLive
 const EIGHT_HOURS_NS = BigInt(8 * 60 * 60) * BigInt(1_000_000_000)
-
-function detectIdentityProvider(): string {
-  if (typeof window === 'undefined') return II_PROD_URL
-  // Heuristic: when running on a localhost-like domain, prefer local II if available.
-  const host = window.location.hostname
-  const isLocalhost =
-    host === 'localhost' ||
-    host === '127.0.0.1' ||
-    host.endsWith('.localhost') ||
-    host.endsWith('.local')
-  return isLocalhost ? II_LOCAL_URL : II_PROD_URL
-}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
   const authClientRef = useRef<AuthClient | null>(null)
+  const sessionClientRef = useRef<SessionClient | null>(null)
 
-  const identityProvider = useMemo(detectIdentityProvider, [])
+  // Define the identity provider URL based on the environment
+  const identityProvider = useMemo(() => {
+    if (typeof window === "undefined") return II_PROD_URL
+    const host = window.location.hostname
+    const isLocalhost = host === "localhost" || host === "127.0.0.1" || host.endsWith(".localhost") || host.endsWith(".local")
+    return isLocalhost ? II_LOCAL_URL : II_PROD_URL
+  }, [])
 
-  // Initialize AuthClient once
+  // Initialize or update session client when user changes
+  useEffect(() => {
+    if (user?.principal) {
+      console.log('[AuthContext] User principal detected, initializing session client');
+      
+      // Create a new session client
+      const client = new SessionClient();
+      sessionClientRef.current = client;
+      
+      // Set identity if auth client is available
+      const setIdentityIfAvailable = async () => {
+        try {
+          const authClient = authClientRef.current;
+          if (authClient) {
+            console.log('[AuthContext] Auth client available, getting identity');
+            
+            // Check if getIdentity exists and is a function before calling it
+            if (typeof authClient.getIdentity === 'function') {
+              const identity = authClient.getIdentity();
+              if (identity) {
+                console.log('[AuthContext] Setting identity on session client');
+                client.setIdentity(identity);
+                
+                // Verify the identity was set correctly
+                const actor = await client.getActor(true).catch(e => {
+                  console.error('[AuthContext] Failed to initialize actor with identity:', e);
+                  return null;
+                });
+                
+                if (actor) {
+                  console.log('[AuthContext] Successfully initialized actor with identity');
+                } else {
+                  console.warn('[AuthContext] Failed to initialize actor with identity');
+                }
+              } else {
+                console.warn('[AuthContext] No identity available from auth client');
+              }
+            } else {
+              console.warn('[AuthContext] authClient.getIdentity is not a function');
+            }
+          } else {
+            console.warn('[AuthContext] No auth client available');
+          }
+        } catch (error) {
+          console.error('[AuthContext] Error setting identity on session client:', error);
+        }
+      };
+      
+      void setIdentityIfAvailable()
+    } else {
+      sessionClientRef.current = null
+    }
+  }, [user?.principal])
+
   useEffect(() => {
     let mounted = true
 
@@ -65,22 +121,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (alreadyAuthenticated) {
           const identity = client.getIdentity()
           const principal = identity.getPrincipal().toText()
-          // You can enrich this user object with profile info from your backend/canisters later
+
+          // Initialize session client and set the identity
+          const sessionClient = new SessionClient()
+          sessionClient.setIdentity(identity)
+          sessionClientRef.current = sessionClient
+
           const hydratedUser: User = {
             id: principal,
             name: `User ${principal.slice(0, 5)}…`,
-            avatar: '/generic-user-avatar.png',
-            xp: 1250, // Keep mock XP for UI continuity; replace with real data later
+            avatar: "/generic-user-avatar.png",
+            xp: 1250,
             reputation: 4.8,
             principal,
           }
           setUser(hydratedUser)
         } else {
           setUser(null)
+          sessionClientRef.current = null
         }
       } catch (e) {
-        console.error('Failed to initialize AuthClient:', e)
+        console.error("Failed to initialize AuthClient:", e)
         setUser(null)
+        sessionClientRef.current = null
       } finally {
         if (mounted) setLoading(false)
       }
@@ -98,48 +161,62 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const client = authClientRef.current ?? (await AuthClient.create())
       authClientRef.current = client
 
-      // If already authenticated, just hydrate state
       if (await client.isAuthenticated()) {
         const identity = client.getIdentity()
         const principal = identity.getPrincipal().toText()
+        
+        // Initialize or update session client with the new identity
+        const sessionClient = new SessionClient()
+        sessionClientRef.current = sessionClient
+        
         setUser((prev) => ({
           id: principal,
           name: prev?.name ?? `User ${principal.slice(0, 5)}…`,
-          avatar: prev?.avatar ?? '/generic-user-avatar.png',
+          avatar: prev?.avatar ?? "/generic-user-avatar.png",
           xp: prev?.xp ?? 1250,
           reputation: prev?.reputation ?? 4.8,
           principal,
-        }))
-        setLoading(false)
-        return
+        }));
+        setLoading(false);
+        return;
       }
 
       await new Promise<void>((resolve, reject) => {
         client.login({
           identityProvider,
-          // Optional: derivationOrigin is recommended if your app runs on a custom domain with proxies.
-          // derivationOrigin: window.location.origin,
           maxTimeToLive: EIGHT_HOURS_NS,
-          onSuccess: () => resolve(),
+          onSuccess: async () => {
+            try {
+              // Initialize session client after successful login
+              const sessionClient = new SessionClient();
+              const identity = client.getIdentity();
+              if (identity) {
+                sessionClient.setIdentity(identity);
+              }
+              sessionClientRef.current = sessionClient;
+              resolve();
+            } catch (error) {
+              console.error('Failed to initialize session client:', error);
+              reject(error);
+            }
+          },
           onError: (err) => reject(err),
-        })
-      })
+        });
+      });
 
-      // Success: set user from authenticated identity
       const identity = client.getIdentity()
       const principal = identity.getPrincipal().toText()
       const hydratedUser: User = {
         id: principal,
         name: `User ${principal.slice(0, 5)}…`,
-        avatar: '/generic-user-avatar.png',
+        avatar: "/generic-user-avatar.png",
         xp: 1250,
         reputation: 4.8,
         principal,
       }
       setUser(hydratedUser)
     } catch (error) {
-      console.error('Internet Identity login failed:', error)
-      // Keep user null on failure
+      console.error("Internet Identity login failed:", error)
     } finally {
       setLoading(false)
     }
@@ -148,16 +225,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => {
     setLoading(true)
     try {
-      const client = authClientRef.current ?? (await AuthClient.create())
-      await client.logout()
+      const client = authClientRef.current
+      if (client) {
+        await client.logout()
+      }
       setUser(null)
-      // Clear any app-specific cached data if needed
+      authClientRef.current = null
+      // Clear session client on logout
+      sessionClientRef.current = null
+      // Clear any existing session client
+      
+      setUser(null);
+      
+      // Clear user-specific cached data
       try {
-        localStorage.removeItem('peerverse_vault_items')
-        localStorage.removeItem('peerverse_user')
-      } catch {}
+        localStorage.removeItem("peerverse_vault_items");
+        localStorage.removeItem("peerverse_user");
+      } catch (error) {
+        console.error('Error clearing local storage:', error);
+      }
     } catch (error) {
-      console.error('Logout failed:', error)
+      console.error("Logout failed:", error)
       throw error
     } finally {
       setLoading(false)
@@ -170,6 +258,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     login,
     logout,
     loading,
+    authClient: authClientRef.current,
+    sessionClient: sessionClientRef.current,
+    identity: null,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
@@ -180,5 +271,33 @@ export function useAuth() {
   if (!ctx) {
     throw new Error('useAuth must be used within an AuthProvider')
   }
-  return ctx
+  
+  // Get the identity from the authClient if available
+  const getIdentity = (): Identity | null => {
+    try {
+      if (!ctx.authClient) return null
+      // Get the identity from the auth client
+      const authClient = ctx.authClient as any
+      if (authClient.getIdentity) {
+        // Call getIdentity without any arguments
+        const identity = authClient.getIdentity
+          ? authClient.getIdentity()
+          : null
+        // Set the identity in the session client if it exists
+        if (identity && ctx.sessionClient) {
+          ctx.sessionClient.setIdentity(identity)
+        }
+        return identity
+      }
+      return null
+    } catch (error) {
+      console.error('Error getting identity:', error)
+      return null
+    }
+  }
+  
+  return {
+    ...ctx,
+    identity: getIdentity()
+  }
 }
